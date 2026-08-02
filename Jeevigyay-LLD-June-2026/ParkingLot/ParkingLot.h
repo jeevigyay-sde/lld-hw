@@ -2,9 +2,8 @@
 #define PARKINGLOT_H
 
 #include <iostream>
-#include <mutex>
-#include <unordered_map>
 #include <vector>
+#include <unordered_map>
 #include <memory>
 
 #include "ParkingSlot.h"
@@ -13,19 +12,23 @@
 #include "TicketService.h"
 #include "Receipt.h"
 #include "ReceiptService.h"
-
-std::mutex m_clMutex;
+#include "PricingStrategy.h"
+#include "ParkingStrategy.h"
 
 class ParkingLot
 {
 public:
-  ParkingLot(int iaFloors, std::unordered_map<ParkingSlot::ParkingSlotType, std::vector<std::shared_ptr<ParkingSlot>>> claParkingSlotMap, std::unordered_map<Vehicle::VehicleType, ParkingSlot::ParkingSlotType> claParkingSlottoVehicleMap)
+  ParkingLot(int iaFloors, std::unordered_map<Vehicle::VehicleType, ParkingSlot::ParkingSlotType> claParkingSlottoVehicleMap)
   {
     m_iNoOfFloors = iaFloors;
-    m_clParkingSlotMap = claParkingSlotMap;
     m_clParkingSlotToVehicleMap = claParkingSlottoVehicleMap;
   }
   ~ParkingLot() = default;
+
+  void fnSetParkingStrategy(std::shared_ptr<ParkingStrategy> clpaParkingStrategy)
+  {
+    m_clParkingStrategy = clpaParkingStrategy;
+  }
 
   std::shared_ptr<Ticket> fnGenerateTicket(std::shared_ptr<Vehicle> clpaVehicle)
   {
@@ -34,18 +37,12 @@ public:
     return clTicketService.fnGenerateTicket(clpaVehicle);
   }
 
-  std::shared_ptr<ParkingSlot> fnGetParkingSlot(std::shared_ptr<Vehicle> clpaVehicle)
+  std::shared_ptr<ParkingSlot> fnAllocateParkingSlot(std::shared_ptr<Vehicle> clpaVehicle)
   {
-    std::lock_guard<std::mutex> lock(m_clMutex);
     ParkingSlot::ParkingSlotType enmParkingSlotType = m_clParkingSlotToVehicleMap[clpaVehicle->fnGetVehicleType()];
-    auto clpParkingSlotVector = m_clParkingSlotMap[enmParkingSlotType];
-    for (auto clpParkingSlot : clpParkingSlotVector)
+    if (m_clParkingStrategy)
     {
-      if (clpParkingSlot && clpParkingSlot->fnGetParkingSlotAvailability())
-      {
-        std::cout << "Parking Slot Found for Vehicle: " << std::endl;
-        return clpParkingSlot;
-      }
+      return m_clParkingStrategy->fnAllocateParkingSlot(enmParkingSlotType);
     }
     return nullptr;
   }
@@ -69,8 +66,8 @@ public:
 
 private:
   int m_iNoOfFloors = 0;
-  std::unordered_map<ParkingSlot::ParkingSlotType, std::vector<std::shared_ptr<ParkingSlot>>> m_clParkingSlotMap;
   std::unordered_map<Vehicle::VehicleType, ParkingSlot::ParkingSlotType> m_clParkingSlotToVehicleMap;
+  std::shared_ptr<ParkingStrategy> m_clParkingStrategy;
 };
 
 #endif // PARKINGLOT_H
